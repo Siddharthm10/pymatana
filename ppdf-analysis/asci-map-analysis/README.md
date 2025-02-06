@@ -8,28 +8,6 @@
 > This directory contains the code used to generate the ASCI maps in the 2025 SNMMI abstract submission\
  **_"Angular sampling completeness index and width of projection probability density function strips as spatial resolution metrics in self-collimation single photon emission tomography"_**.
 
-## Description of the scripts
-
-### `evaluate_sampling_slopes_24rots.py`
-
-The script `evaluate_sampling_slopes.py` reads in the PPDF matrices and performs linear regression on the PPDF beams to extract the slopes. The slopes data are saved in `.npz` files.
-
-### `evaluate_sampling_angles_24rots.py`
-
-The script `evaluate_sampling_angles.py` reads in the slopes data and calculates the angles from where the ppdf beams are sampled. The angles data are saved in a `.npz` file.
-
-### `analyze_ppdf_strip_width_24rots.py`
-
-The script `analyze_ppdf_strip_width.py` reads in the PPDF matrices and calculates the strip widths. The strip width data are saved in a `.npz` file.
-
-### `plot_asci_map_24rots.ipynb`
-
-The Jupyter notebook `plot_asci_map_24rots.ipynb` reads in the angles and strip width data and generates the ASCI maps.
-
-### `generate_3d_cuboids.py`
-
-The script `generate_3d_cuboids.py` generates the cuboids for the 24 rotations.
-
 ## How to run the scripts
 
 > [!Warning]
@@ -53,3 +31,26 @@ Please read the scripts and modify them as needed to suit your needs.
 1. Run `evaluate_sampling_angles_24rots.py` to generate the angles data.
 1. Run `analyze_ppdf_strip_width_24rots.py` to generate the strip width data.
 1. Run `plot_asci_map_24rots.ipynb` to generate the ASCI maps
+
+
+## Description of the scripts
+
+### `evaluate_sampling_slopes_24rots.py`
+
+The script `evaluate_sampling_slopes.py` reads in the PPDF matrices and performs linear regression on the PPDF beams to extract the slopes. The slopes data are saved in `.npz` files.
+
+### `evaluate_sampling_angles_24rots.py`
+
+The script `evaluate_sampling_angles.py` reads in the slopes data and calculates the angles from where the ppdf beams are sampled. The angles data are saved in a `.npz` file.
+
+### `analyze_ppdf_strip_width_24rots.py`
+
+The script `analyze_ppdf_strip_width.py` reads in the PPDF matrices and calculates the strip widths. The strip width data are saved in a `.npz` file.
+
+### `plot_asci_map_24rots.ipynb`
+
+The Jupyter notebook `plot_asci_map_24rots.ipynb` reads in the angles and strip width data and generates the ASCI maps.
+
+### `generate_3d_cuboids.py`
+
+The script `generate_3d_cuboids.py` generates the cuboids for the 24 rotations.
