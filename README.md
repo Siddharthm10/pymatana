@@ -1,13 +1,21 @@
-# PyMatAna
-The repository contains the python codes for analyzing the system response matrix.
+---
+title: Imaging System Response Matrix Analysis
+author: "Fang Han"
+date: today
+format: gfm
+description: "Python-based analysis tools for imaging system response matrix analysis."
+---
+
+Python-based analysis tools for imaging system response matrix analysis.
 
 ## PPDF Analysis
-PPDF_Analysis folder
-### Angular projection analysis
-```angular-projection.py``` is used for running in batch.
-An example of performing a batch analysis is as followed:
-```shell
-fnamelist=$(ls ../data/)
-for fname in $fnamelist; do python angular-projection.py $fname;done
-```
-```angular-projection.ipynb``` is a jupyter notebook. It is used for interactive running and showing the analysis process.
+
+[ppdf-analysis](ppdf-analysis) folder
+
+### Analysis of Angular Sampling Completeness Index (ASCI) Maps Analysis
+
+[ppdf-analysis/asci-map-analysis/](ppdf-analysis/asci-map-analysis/) folder
+
+- The `asci-map-analysis` folder contains the code used to generate the ASCI maps in the 2025 SNMMI abstract submission **_"Angular sampling completeness index and width of projection probability density function strips as spatial resolution metrics in self-collimation single photon emission tomography"_**.
+- Follow the instructions in the [README](ppdf-analysis/asci-map-analysis/README.md) to run the scripts.
+
