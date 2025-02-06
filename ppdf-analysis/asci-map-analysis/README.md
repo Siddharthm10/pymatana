@@ -1,9 +1,8 @@
----
-title: Angular Sampling Completeness Index (ASCI) Map Analysis
-author: "Fang Han"
-date: today
-format: gfm
----
+# Angular Sampling Completeness Index (ASCI) Map Analysis
+
+| **Review Date** | 2025-02-06 |
+|-----------------|------------|
+| **Author** | [Fang Han](mailto:fhanonline@gmail.com)|
 
 > [!NOTE]
 > This directory contains the code used to generate the ASCI maps in the 2025 SNMMI abstract submission\
