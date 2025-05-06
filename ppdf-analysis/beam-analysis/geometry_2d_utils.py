@@ -1,6 +1,9 @@
+from typing import Dict, Sequence
+
+from torch import Tensor, arange, atan2, float32
+from torch import max as torch_max
+from torch import meshgrid, pi, stack, tensor
 from torch.nn import functional as F
-from torch import max as torch_max, tensor, Tensor
-from typing import Sequence
 
 
 def local_max_1d(data: Tensor, size: int = 3):
@@ -28,3 +31,35 @@ def fov_tensor_dict(
     }
     fov_dict["size in mm"] = fov_dict["n pixels"] * fov_dict["mm per pixel"]
     return fov_dict
+
+
+def pixels_coordinates(
+    fov_dict: Dict,
+) -> Tensor:
+
+    pixel_indices = stack(
+        meshgrid(
+            arange(0, int(fov_dict["n pixels"][0])),
+            arange(0, int(fov_dict["n pixels"][1])),
+            indexing="ij",
+        ),
+        dim=2,
+    ).view(-1, 2)
+    return (
+        pixel_indices.to(dtype=float32) * fov_dict["mm per pixel"]
+        - fov_dict["size in mm"] * 0.5
+        + fov_dict["center coordinates in mm"]
+    )
+
+
+def pixels_to_detector_unit_rads(
+    pixel_coordinates: Tensor,
+    detector_unit_center: Tensor,
+) -> Tensor:
+
+    pixel_rads = atan2(
+        pixel_coordinates[:, 1] - detector_unit_center[1],
+        pixel_coordinates[:, 0] - detector_unit_center[0],
+    )
+    pixel_rads = pixel_rads + 2 * pi * (pixel_rads < 0)
+    return pixel_rads
