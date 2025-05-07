@@ -62,4 +62,6 @@ def pixels_to_detector_unit_rads(
         pixel_coordinates[:, 0] - detector_unit_center[0],
     )
     pixel_rads = pixel_rads + 2 * pi * (pixel_rads < 0)
+    if pixel_rads.max() - pixel_rads.min() > pi:
+        pixel_rads[pixel_rads > pi] -= 2 * pi
     return pixel_rads

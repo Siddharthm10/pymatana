@@ -101,30 +101,24 @@ def sample_ppdf_on_arc_2d_local(
     return sampled_ppdf, sampling_rads, sampling_points
 
 
-def angular_edges_on_arc(
-    sampled_data: Tensor,
-    sampling_rads: Tensor,
-    threshold: float = 0.01,
+def get_beams_angle_radian(
+    beams_centers: Tensor,
+    reference_point: Tensor,
 ) -> Tensor:
-
-    relative_sampled_ppdf = sampled_data / sampled_data.max()
-    threshold = 0.01
-    thresholded_relative_sampled_ppdf = zeros_like(
-        relative_sampled_ppdf
-    ).masked_fill_(relative_sampled_ppdf > threshold, 1)
-
-    forward_diff_abs = diff(
-        thresholded_relative_sampled_ppdf, prepend=tensor([0.0])
-    ).abs()
-    radian_edges = sampling_rads[forward_diff_abs > 0.5]
-    return radian_edges
+    n_beams = beams_centers.shape[0]
+    reference_point_expanded = reference_point.unsqueeze(0).expand(n_beams, -1)
+    angles = atan2(
+        reference_point_expanded[:, 1] - beams_centers[:, 1],
+        reference_point_expanded[:, 0] - beams_centers[:, 0],
+    )
+    angles = angles + 2 * pi * (angles < 0).float()
+    return angles
 
 
-def beams_weighted_center(
-    beam_masks: Tensor,
-    fov_pts: Tensor,
+def get_beams_weighted_center(
+    beams_masks: Tensor,
+    pixels_xys: Tensor,
     ppdf_data: Tensor,
-    beams_relative_sensitivities: Tensor,
 ) -> Tensor:
     """
     Compute the weighted center of the beams based on the pixel data and beam masks.
@@ -137,7 +131,7 @@ def beams_weighted_center(
       - `dtype`: `bool`
 
 
-    fov_pts: Tensor
+    pixels_xys: Tensor
       The field of view points.
 
     ppdf_data: Tensor
@@ -146,21 +140,22 @@ def beams_weighted_center(
     beams_relative_sensitivities: Tensor
       The means of the beams.
     """
-    n_beams = beam_masks.shape[1]
-    fov_pts_expanded = fov_pts.unsqueeze(1).expand(-1, n_beams, -1)
-    ppdf_data_expanded = (
-        ppdf_data.view(-1).unsqueeze(1).unsqueeze(1).expand(-1, n_beams, 2)
+    n_beams = beams_masks.shape[0]
+    pixels_xys_expanded = pixels_xys.unsqueeze(0).expand(n_beams, -1, -1)
+    ppdf_expanded = ppdf_data.view(-1).unsqueeze(0).unsqueeze(2).expand(n_beams, -1, 2)
+
+    xy_weighted_sum = (
+        (pixels_xys_expanded * ppdf_expanded)
+        .masked_fill_(~beams_masks.unsqueeze(2).expand(-1, -1, 2), 0)
+        .sum(dim=1)
     )
-    weighted_centers = (
-        (fov_pts_expanded * ppdf_data_expanded)
-        .masked_fill_(~beam_masks.unsqueeze(2).expand(-1, -1, 2), 0)
-        .sum(dim=0)
+    total_weights = (
+        (ppdf_data.view(-1).unsqueeze(0).expand(n_beams, -1))
+        .clone()
+        .masked_fill_(~beams_masks, 0)
+        .sum(dim=1)
     )
-    beam_n_pixels = beam_masks.sum(dim=0)
-    weighted_centers = weighted_centers / (
-        beam_n_pixels * beams_relative_sensitivities
-    ).unsqueeze(1)
-    return weighted_centers
+    return xy_weighted_sum / total_weights.unsqueeze(1)
 
 
 def full_width_half_maximum_1d_batch(
@@ -205,9 +200,7 @@ def full_width_half_maximum_1d_batch(
     n_points = data_x_batch.shape[1]
 
     # Find the indices of the points where the curve crosses half of the maximum
-    half_max = (
-        (data_y_batch.max(dim=1).values * 0.5).unsqueeze(1).expand(-1, n_points)
-    )
+    half_max = (data_y_batch.max(dim=1).values * 0.5).unsqueeze(1).expand(-1, n_points)
     x_above_half_max_batch = (
         where(data_y_batch >= half_max, data_x_batch, 0).sort(dim=1).values
     )
@@ -340,91 +333,90 @@ def beam_samples_on_points_batch(
     return sampled_beams_batch
 
 
-def beams_basic_properties(
-    ppdf_2d: Tensor,
-    pixels_coordinates: Tensor,
-    pixels_rads: Tensor,
-    rads_edges: Tensor,
-    detector_unit_center: Tensor,
+def angular_edges_on_arc(
+    sampled_data: Tensor,
+    sampling_rads: Tensor,
     threshold: float = 0.01,
-) -> Dict[str, Tensor]:
+) -> Tensor:
 
-    # Basic properties of the beams
-    relative_ppdf = ppdf_2d / ppdf_2d.max()
-    n_fov_points = pixels_coordinates.shape[0]
-    n_rad_intervals = rads_edges.shape[0] - 1
-    pixels_rads_expanded = pixels_rads.unsqueeze(1).expand(-1, n_rad_intervals)
+    relative_sampled_ppdf = sampled_data / sampled_data.max()
+    threshold = 0.01
+    thresholded_relative_sampled_ppdf = zeros_like(relative_sampled_ppdf).masked_fill_(
+        relative_sampled_ppdf > threshold, 1
+    )
 
-    rad_interval_edges = stack(
-        [
-            rads_edges[:-1],
-            rads_edges[1:],
-        ],
+    forward_diff_abs = diff(
+        thresholded_relative_sampled_ppdf, prepend=tensor([0.0])
+    ).abs()
+    radian_edges = sampling_rads[forward_diff_abs > 0.5]
+    return radian_edges
+
+
+def beams_boundaries_radians(
+    arc_sampled_ppdf: Tensor, arc_rads: Tensor, threshold: float = 0.01
+) -> Tensor:
+    arc_rads_step = arc_rads[1] - arc_rads[0]
+    n_samples = arc_rads.shape[0]
+
+    appened_rads = cat(
+        (
+            arc_rads,
+            arc_rads[-1:] + arc_rads_step,
+        ),
+        dim=0,
+    )
+    relative_sampled_ppdf = arc_sampled_ppdf / arc_sampled_ppdf.max()
+    threshold = 0.01
+    thresholded_relative_sampled_ppdf = zeros_like(relative_sampled_ppdf).masked_fill_(
+        relative_sampled_ppdf > threshold, 1
+    )
+
+    forward_diff_abs = diff(
+        thresholded_relative_sampled_ppdf, prepend=tensor([0.0]), append=tensor([0.0])
+    ).abs()
+
+    radian_edges_indices = argwhere(forward_diff_abs > 0.5).squeeze()
+
+    # Get the mean value of the relative sampled ppdf in each interval
+    # between the radian edges
+    n_intervals = radian_edges_indices.shape[0] - 1
+    indices_expanded = arange(n_samples).view(1, -1).expand(n_intervals, -1)
+    interval_boundaries = stack(
+        (
+            radian_edges_indices[:-1],
+            radian_edges_indices[1:],
+        ),
         dim=1,
-    )  # (n_rad_intervals, 2)
-    rads_edges_expanded = rads_edges.unsqueeze(0).expand(n_fov_points, -1)
-
-    # Get the radian intervals masks
-    rad_interval_masks = (
-        pixels_rads_expanded >= rads_edges_expanded[:, :-1]
-    ) & (
-        pixels_rads_expanded < rads_edges_expanded[:, 1:]
-    )  # (n_fov_points, n_rad_intervals)
-
-    relative_ppdf_expanded = (
-        relative_ppdf.view(-1).unsqueeze(1).expand(-1, n_rad_intervals)
     )
-    sum_template = relative_ppdf_expanded.clone().masked_fill_(
-        ~rad_interval_masks, 0
+    interval_boundaries_expanded = interval_boundaries.unsqueeze(1).expand(
+        -1, n_samples, -1
     )
-    intervals_relative_sensitivities = sum_template.sum(
-        dim=0
-    ) / rad_interval_masks.sum(dim=0)
 
-    # Discard the range with mean < 0.01
-    beams_masks = rad_interval_masks[
-        :, intervals_relative_sensitivities > threshold
-    ]
-    beams_relative_sensitivities = intervals_relative_sensitivities[
-        intervals_relative_sensitivities > threshold
-    ]
-    beam_n_pixels = beams_masks.sum(dim=0)
-
-    # Get the weighted center of the beams
-    beams_weighted_centers = beams_weighted_center(
-        beams_masks,
-        pixels_coordinates,
-        relative_ppdf,
-        beams_relative_sensitivities,
+    interval_masks = logical_and(
+        indices_expanded >= interval_boundaries_expanded[:, :, 0],
+        indices_expanded < interval_boundaries_expanded[:, :, 1],
     )
-    beams_sensitivities = beams_relative_sensitivities * ppdf_2d.max()
 
-    # Calculate the beam regions radian edges
-    beam_rads_edges = rad_interval_edges[
-        intervals_relative_sensitivities > threshold
-    ]
-    # Swap the axes of the beam masks
-    beams_masks = beams_masks.swapaxes(0, 1)
+    interval_means = relative_sampled_ppdf.unsqueeze(0).expand(
+        n_intervals, -1
+    ).clone().masked_fill_(~interval_masks, 0).sum(dim=1) / interval_masks.sum(dim=1)
 
-    # Number of beams
-    n_beams = beams_masks.shape[0]
+    beams_boundaries_indices = interval_boundaries[interval_means > threshold]
+    beams_boundaries_angles = appened_rads[beams_boundaries_indices]
+    return beams_boundaries_angles
 
-    # Calculate the beam axis angle in radian
-    beam_axis_rad = atan2(
-        beams_weighted_centers[:, 1] - detector_unit_center[1],
-        beams_weighted_centers[:, 0] - detector_unit_center[0],
+
+def get_beams_masks(
+    pixels_rads: Tensor,
+    beam_bounds: Tensor,
+) -> Tensor:
+    n_beams = beam_bounds.shape[0]
+    pixels_rads_expanded = pixels_rads.unsqueeze(0).expand(n_beams, -1)
+    # Get beams masks
+    return logical_and(
+        pixels_rads_expanded >= beam_bounds[:, 0].view(-1, 1),
+        pixels_rads_expanded < beam_bounds[:, 1].view(-1, 1),
     )
-    beam_axis_rad = beam_axis_rad + 2 * pi * (beam_axis_rad < 0)
-    return {
-        "masks": beams_masks,
-        "weighted centers": beams_weighted_centers,
-        "rads edges": beam_rads_edges,
-        "axial angle": beam_axis_rad,
-        "sensitivities": beams_sensitivities,
-        "relative sensitivities": beams_relative_sensitivities,
-        "number of pixels": beam_n_pixels,
-        "number of beams": tensor([n_beams]),
-    }
 
 
 def beams_line_properties(
@@ -475,6 +467,68 @@ def beams_line_properties(
     }
 
 
+def get_beams_basic_properties(
+    beams_masks: Tensor,
+    ppdf_2d: Tensor,
+    pixels_xys: Tensor,
+):
+    n_beams = beams_masks.shape[0]
+    relative_ppdf = ppdf_2d / ppdf_2d.max()
+    n_fov_points = pixels_xys.shape[0]
+    # Calculate the relative sensitivity of each beam
+    relative_ppdf_expanded = relative_ppdf.view(-1).unsqueeze(0).expand(n_beams, -1)
+    # Calculate the relative sensitivity of each beam
+    relative_sensitivity = relative_ppdf_expanded.clone().masked_fill_(
+        ~beams_masks, 0
+    ).sum(dim=1) / beams_masks.sum(dim=1)
+
+    beams_sizes = beams_masks.sum(dim=1)
+
+    absolute_sensitivity = relative_sensitivity * ppdf_2d.max()
+
+    return beams_sizes, relative_sensitivity, absolute_sensitivity
+
+
+def get_beam_width(
+    beams_centers: Tensor,
+    detector_unit_center: Tensor,
+    beams_masks: Tensor,
+    ppdf_2d: Tensor,
+    fov_dict: Dict,
+    line_n_samples: int = 4096,
+):
+    # Get the beam sampling lines
+    (beam_sp_ptx_batch, beam_sp_distance) = beam_sampling_line_batch(
+        detector_unit_center,
+        beams_centers,
+        n_samples=line_n_samples,
+        length=64.0,
+    )
+
+    n_beams = beams_centers.shape[0]
+
+    beams_data_2d_batch = (
+        ppdf_2d.view(-1)
+        .unsqueeze(0)
+        .expand(n_beams, -1)
+        .clone()
+        .masked_fill_(~beams_masks, 0)
+    ).view(
+        n_beams,
+        int(fov_dict["n pixels"][0]),
+        int(fov_dict["n pixels"][1]),
+    )
+
+    sampled_beams_data = beam_samples_on_points_batch(
+        beams_data_2d_batch, beam_sp_ptx_batch, fov_dict
+    )
+    beams_fwhm, x_bounds_batch = full_width_half_maximum_1d_batch(
+        beam_sp_distance.view(1, -1).expand(-1, line_n_samples),
+        sampled_beams_data,
+    )
+    return beams_fwhm, x_bounds_batch, sampled_beams_data, beam_sp_distance
+
+
 def beams_properties_2d(
     ppdf_2d: Tensor,
     pixels_coordinates: Tensor,
@@ -502,26 +556,20 @@ def beams_properties_2d(
     rads_edges_expanded = rads_edges.unsqueeze(0).expand(n_fov_points, -1)
 
     # Get the radian intervals masks
-    rad_interval_masks = (
-        pixels_rads_expanded >= rads_edges_expanded[:, :-1]
-    ) & (
+    rad_interval_masks = (pixels_rads_expanded >= rads_edges_expanded[:, :-1]) & (
         pixels_rads_expanded < rads_edges_expanded[:, 1:]
     )  # (n_fov_points, n_rad_intervals)
 
     relative_ppdf_expanded = (
         relative_ppdf.view(-1).unsqueeze(1).expand(-1, n_rad_intervals)
     )
-    sum_template = relative_ppdf_expanded.clone().masked_fill_(
-        ~rad_interval_masks, 0
-    )
-    intervals_relative_sensitivities = sum_template.sum(
+    sum_template = relative_ppdf_expanded.clone().masked_fill_(~rad_interval_masks, 0)
+    intervals_relative_sensitivities = sum_template.sum(dim=0) / rad_interval_masks.sum(
         dim=0
-    ) / rad_interval_masks.sum(dim=0)
+    )
 
     # Discard the range with mean < 0.01
-    beams_masks = rad_interval_masks[
-        :, intervals_relative_sensitivities > threshold
-    ]
+    beams_masks = rad_interval_masks[:, intervals_relative_sensitivities > threshold]
     beams_relative_sensitivities = intervals_relative_sensitivities[
         intervals_relative_sensitivities > threshold
     ]
@@ -537,9 +585,7 @@ def beams_properties_2d(
     beams_sensitivities = beams_relative_sensitivities * ppdf_2d.max()
 
     # Calculate the beam regions radian edges
-    beam_rads_edges = rad_interval_edges[
-        intervals_relative_sensitivities > threshold
-    ]
+    beam_rads_edges = rad_interval_edges[intervals_relative_sensitivities > threshold]
 
     # Get the beam sampling lines
     (beam_sp_ptx_batch, beam_sp_distance) = beam_sampling_line_batch(
