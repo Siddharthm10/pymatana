@@ -11,10 +11,7 @@ from torch import (
 from beam_property_extract import (
     beams_boundaries_radians,
     get_beams_masks,
-    get_beams_weighted_center,
-    get_beam_width,
-    get_beams_angle_radian,
-    get_beams_basic_properties,
+    get_beams_combined_mask,
     sample_ppdf_on_arc_2d_local,
 )
 from convex_hull_helper import convex_hull_2d, sort_points_for_hull_batch_2d
@@ -28,8 +25,9 @@ from ppdf_io import load_ppdfs_data_from_hdf5
 import h5py
 from beam_property_io import (
     initialize_beam_properties_hdf5,
+    initialize_beam_masks_hdf5,
     append_to_hdf5_dataset,
-    stack_beams_properties,
+    # stack_beams_properties,
 )
 
 if __name__ == "__main__":
@@ -55,15 +53,6 @@ if __name__ == "__main__":
     fov_points_2d = pixels_coordinates(fov_dict)
     fov_n_pixels_int = int(fov_dict["n pixels"].prod())
 
-    # Initialize the HDF5 file to store the beams properties
-    out_hdf5_filename = f"beams_properties_{layouts_unique_id}.hdf5"
-    out_dir = "output"
-    out_hdf5_file, beam_properties_dataset = (
-        initialize_beam_properties_hdf5(
-            out_hdf5_filename, out_dir
-        )
-    )
-
     # Create the progress bar
     progress = Progress(
         SpinnerColumn(),
@@ -72,6 +61,9 @@ if __name__ == "__main__":
         TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
     )
 
+    # Define the output directory
+    out_dir = "output"
+
     # Define the layout sequence
     layout_sequence = arange(0, 24)
 
@@ -79,11 +71,22 @@ if __name__ == "__main__":
         task_outer = progress.add_task(
             "Processing layouts", total=int(layout_sequence.shape[0])
         )
-
+        # Create the progress bar for the inner loop
+        task_inner = progress.add_task(
+            "Processing layout 000", total=726, completed=0
+        )
         # Loop through the scanner positions (0 to 23)
         for layout_idx in layout_sequence:
 
-        
+            # Initialize the HDF5 file to store the beams masks
+            out_hdf5_filename = (
+                f"beams_masks_{layouts_unique_id}_{layout_idx:03d}.hdf5"
+            )
+
+            out_hdf5_file, beams_masks_dataset = initialize_beam_masks_hdf5(
+                fov_n_pixels_int, out_hdf5_filename, out_dir
+            )
+
             # Load the scanner geometry
             plates_vertices, detector_units_vertices = (
                 load_scanner_layout_geometries(
@@ -117,20 +120,15 @@ if __name__ == "__main__":
             )
             hull_points_batch = sort_points_for_hull_batch_2d(hull_points_batch)
 
-            # Print the shapes of the loaded data
-            # print(
-            #     f"Layout {layout_idx}:\n"
-            #     + f"Metal plates shape  : {list(plates_vertices.shape)}\n"
-            #     + f"Detector units shape: {list(detector_units_vertices.shape)}\n"
-            #     + f"PPDFs data shape:     {list(ppdfs.shape)}"
-            # )
             n_detector_units = detector_units_vertices.shape[0]
 
-            # Create the progress bar for the inner loop
-            task_inner = progress.add_task(
-                f"Processing detector units for layout {layout_idx}",
-                total=n_detector_units,
-            )
+            # progress.update(
+            #     task_inner,
+            #     description=f"Processing layout {layout_idx}",
+            #     # total=int(n_detector_units),
+            #     completed=0,
+            # )
+            progress.reset(task_inner, total=int(n_detector_units), start=True)
 
             # Create a sequence of detector unit indices
             detector_units_sequence = arange(0, n_detector_units)
@@ -168,94 +166,35 @@ if __name__ == "__main__":
                     fov_points_rads,
                     beams_boundaries,
                 )
-                beams_weighted_centers = get_beams_weighted_center(
-                    beams_masks,
-                    fov_points_xy,
-                    ppdf_data_2d,
-                )
                 n_beams = beams_masks.shape[0]
 
-                (
-                    beams_fwhm,
-                    x_bounds_batch,
-                    sampled_beams_data,
-                    beam_sp_distance,
-                ) = get_beam_width(
-                    beams_weighted_centers,
-                    detector_unit_centers[detector_unit_idx],
-                    beams_masks,
-                    ppdf_data_2d,
-                    fov_dict,
-                )
+                combined_beams_masks = get_beams_combined_mask(beams_masks)
 
-                beams_angle = get_beams_angle_radian(
-                    beams_weighted_centers,
-                    detector_unit_centers[detector_unit_idx],
-                )
-                (
-                    beams_sizes,
-                    beams_relative_sensitivity,
-                    beams_absolute_sensitivity,
-                ) = get_beams_basic_properties(
-                    beams_masks, ppdf_data_2d, fov_points_xy
-                )
-
-                stacked_beams_properties = stack_beams_properties(
-                    int(layout_idx),
-                    int(detector_unit_idx),
-                    angles=beams_angle,
-                    fwhms=beams_fwhm,
-                    sizes=beams_sizes,
-                    relative_sensitivities=beams_relative_sensitivity,
-                    absolute_sensitivities=beams_absolute_sensitivity,
-                    weighted_centers=beams_weighted_centers,
-                )
-
-
-                # Append the beams properties to the HDF5 dataset
+                # Append the beam masks to the HDF5 dataset
                 append_to_hdf5_dataset(
-                    beam_properties_dataset,
-                    stacked_beams_properties,
+                    beams_masks_dataset,
+                    combined_beams_masks,
                 )
-                # # Append the beam masks to the HDF5 dataset
-                # append_to_hdf5_dataset(
-                #     beam_mask_dataset,
-                #     beams_masks,
-                # )
-
-                if n_beams < 3:
-                    print(
-                        f"Detector unit {detector_unit_idx}:\n"
-                        + f"Number of beams: {n_beams}\n"
-                    )
-
+                # print(f"completed: {detector_unit_idx}:03d")
                 progress.update(
                     task_inner,
                     advance=1,
                 )
 
-            # print(
-            #     f"Layout {layout_idx}:\n"
-            #     + f"Shape of beams_masks_collection:    {list(beams_masks_collection.shape)}"
-            #     + f"Shape of beams_properties_collection: {list(beams_properties_collection.shape)}"
-            # )
+            print(
+                f"Layout {layout_idx}:\n"
+                + f"\n  beams_properties_dataset shape: {list(beams_masks_dataset.shape)}\n"
+            )
+            # # Close the HDF5 file
+            out_hdf5_file.close()
+            # Print the final message
+            print(
+                f"Beams properties saved in:\n{out_dir}/{out_hdf5_filename}"
+            )  #
 
-            progress.remove_task(task_inner)
             progress.update(
                 task_outer,
                 advance=1,
             )
-        progress.remove_task(task_outer)
-
-    print(
-        "Final report:\n"
-        + f"\n  beams_properties_dataset shape: {list(beam_properties_dataset.shape)}\n"
-    )
-    # # Close the HDF5 file
-    out_hdf5_file.close()
-    # Print the final message
-    print(
-        f"Beams properties saved in:\n{out_dir}/{out_hdf5_filename}"
-    )  # 
 
     print("Processing completed.")

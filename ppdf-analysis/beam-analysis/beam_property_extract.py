@@ -1,7 +1,7 @@
 from typing import Dict
 
 from torch import Tensor, arange, argwhere, atan2, cat, cos, diff
-from torch import empty as empty_tensor
+from torch import empty as empty_tensor, uint16 as uint16_tensor
 from torch import (
     float32,
     gradient,
@@ -142,7 +142,9 @@ def get_beams_weighted_center(
     """
     n_beams = beams_masks.shape[0]
     pixels_xys_expanded = pixels_xys.unsqueeze(0).expand(n_beams, -1, -1)
-    ppdf_expanded = ppdf_data.view(-1).unsqueeze(0).unsqueeze(2).expand(n_beams, -1, 2)
+    ppdf_expanded = (
+        ppdf_data.view(-1).unsqueeze(0).unsqueeze(2).expand(n_beams, -1, 2)
+    )
 
     xy_weighted_sum = (
         (pixels_xys_expanded * ppdf_expanded)
@@ -200,7 +202,9 @@ def full_width_half_maximum_1d_batch(
     n_points = data_x_batch.shape[1]
 
     # Find the indices of the points where the curve crosses half of the maximum
-    half_max = (data_y_batch.max(dim=1).values * 0.5).unsqueeze(1).expand(-1, n_points)
+    half_max = (
+        (data_y_batch.max(dim=1).values * 0.5).unsqueeze(1).expand(-1, n_points)
+    )
     x_above_half_max_batch = (
         where(data_y_batch >= half_max, data_x_batch, 0).sort(dim=1).values
     )
@@ -341,9 +345,9 @@ def angular_edges_on_arc(
 
     relative_sampled_ppdf = sampled_data / sampled_data.max()
     threshold = 0.01
-    thresholded_relative_sampled_ppdf = zeros_like(relative_sampled_ppdf).masked_fill_(
-        relative_sampled_ppdf > threshold, 1
-    )
+    thresholded_relative_sampled_ppdf = zeros_like(
+        relative_sampled_ppdf
+    ).masked_fill_(relative_sampled_ppdf > threshold, 1)
 
     forward_diff_abs = diff(
         thresholded_relative_sampled_ppdf, prepend=tensor([0.0])
@@ -367,12 +371,14 @@ def beams_boundaries_radians(
     )
     relative_sampled_ppdf = arc_sampled_ppdf / arc_sampled_ppdf.max()
     threshold = 0.01
-    thresholded_relative_sampled_ppdf = zeros_like(relative_sampled_ppdf).masked_fill_(
-        relative_sampled_ppdf > threshold, 1
-    )
+    thresholded_relative_sampled_ppdf = zeros_like(
+        relative_sampled_ppdf
+    ).masked_fill_(relative_sampled_ppdf > threshold, 1)
 
     forward_diff_abs = diff(
-        thresholded_relative_sampled_ppdf, prepend=tensor([0.0]), append=tensor([0.0])
+        thresholded_relative_sampled_ppdf,
+        prepend=tensor([0.0]),
+        append=tensor([0.0]),
     ).abs()
 
     radian_edges_indices = argwhere(forward_diff_abs > 0.5).squeeze()
@@ -399,7 +405,9 @@ def beams_boundaries_radians(
 
     interval_means = relative_sampled_ppdf.unsqueeze(0).expand(
         n_intervals, -1
-    ).clone().masked_fill_(~interval_masks, 0).sum(dim=1) / interval_masks.sum(dim=1)
+    ).clone().masked_fill_(~interval_masks, 0).sum(dim=1) / interval_masks.sum(
+        dim=1
+    )
 
     beams_boundaries_indices = interval_boundaries[interval_means > threshold]
     beams_boundaries_angles = appened_rads[beams_boundaries_indices]
@@ -417,6 +425,25 @@ def get_beams_masks(
         pixels_rads_expanded >= beam_bounds[:, 0].view(-1, 1),
         pixels_rads_expanded < beam_bounds[:, 1].view(-1, 1),
     )
+
+
+def get_beams_combined_mask(
+    beams_masks: Tensor,
+) -> Tensor:
+    """
+    Get the combined mask for the beams.
+    The combined mask is uint16 tensor with the same shape as the beams masks.
+    The value of the combined mask is the beam id.
+    """
+    n_beams = beams_masks.shape[0]
+    beams_masks_valued = (
+        arange(1, n_beams + 1).view(-1, 1).expand(-1, beams_masks.shape[1])
+    )
+    return (
+        beams_masks_valued.clone()
+        .masked_fill_(~beams_masks, 0)
+        .to(dtype=uint16_tensor)
+    ).sum(dim=0).unsqueeze(0)
 
 
 def beams_line_properties(
@@ -476,7 +503,9 @@ def get_beams_basic_properties(
     relative_ppdf = ppdf_2d / ppdf_2d.max()
     n_fov_points = pixels_xys.shape[0]
     # Calculate the relative sensitivity of each beam
-    relative_ppdf_expanded = relative_ppdf.view(-1).unsqueeze(0).expand(n_beams, -1)
+    relative_ppdf_expanded = (
+        relative_ppdf.view(-1).unsqueeze(0).expand(n_beams, -1)
+    )
     # Calculate the relative sensitivity of each beam
     relative_sensitivity = relative_ppdf_expanded.clone().masked_fill_(
         ~beams_masks, 0
@@ -497,6 +526,45 @@ def get_beam_width(
     fov_dict: Dict,
     line_n_samples: int = 4096,
 ):
+    """
+    Compute the Full Width at Half Maximum (FWHM) of beams and their sampled data
+    along specified sampling lines.
+
+    Parameters
+    ----------
+    beams_centers : Tensor
+        A tensor of shape `(n_beams, 2)` representing the coordinates of the beam centers.
+    detector_unit_center : Tensor
+        A tensor of shape `(2,)` representing the center of the detector unit.
+    beams_masks : Tensor
+        A boolean tensor of shape `(n_beams, n_pixels_x * n_pixels_y)` indicating
+        the valid regions for each beam.
+    ppdf_2d : Tensor
+        A 2D tensor of shape `(n_pixels_x, n_pixels_y)` representing the pixelated
+        probability density function (PPDF).
+    fov_dict : Dict
+        A dictionary containing field-of-view (FOV) metadata, including the number
+        of pixels in each dimension (`"n pixels"`).
+    line_n_samples : int, optional
+        The number of samples to take along each sampling line. Default is 4096.
+
+    Returns
+    -------
+    Tuple[Tensor, Tensor, Tensor, Tensor]
+        - `beams_fwhm` : Tensor
+            A tensor of shape `(n_beams,)` containing the Full Width at Half Maximum
+            (FWHM) for each beam.
+        - `x_bounds_batch` : Tensor
+            A tensor of shape `(n_beams, 2)` containing the x-coordinate bounds for
+            each beam's FWHM.
+        - `sampled_beams_data` : Tensor
+            A tensor of shape `(n_beams, line_n_samples)` containing the sampled beam
+            data along the sampling lines.
+        - `beam_sp_distance` : Tensor
+            A tensor of shape `(line_n_samples,)` representing the distances along
+            the sampling lines.
+    """
+
     # Get the beam sampling lines
     (beam_sp_ptx_batch, beam_sp_distance) = beam_sampling_line_batch(
         detector_unit_center,
@@ -556,20 +624,26 @@ def beams_properties_2d(
     rads_edges_expanded = rads_edges.unsqueeze(0).expand(n_fov_points, -1)
 
     # Get the radian intervals masks
-    rad_interval_masks = (pixels_rads_expanded >= rads_edges_expanded[:, :-1]) & (
+    rad_interval_masks = (
+        pixels_rads_expanded >= rads_edges_expanded[:, :-1]
+    ) & (
         pixels_rads_expanded < rads_edges_expanded[:, 1:]
     )  # (n_fov_points, n_rad_intervals)
 
     relative_ppdf_expanded = (
         relative_ppdf.view(-1).unsqueeze(1).expand(-1, n_rad_intervals)
     )
-    sum_template = relative_ppdf_expanded.clone().masked_fill_(~rad_interval_masks, 0)
-    intervals_relative_sensitivities = sum_template.sum(dim=0) / rad_interval_masks.sum(
-        dim=0
+    sum_template = relative_ppdf_expanded.clone().masked_fill_(
+        ~rad_interval_masks, 0
     )
+    intervals_relative_sensitivities = sum_template.sum(
+        dim=0
+    ) / rad_interval_masks.sum(dim=0)
 
     # Discard the range with mean < 0.01
-    beams_masks = rad_interval_masks[:, intervals_relative_sensitivities > threshold]
+    beams_masks = rad_interval_masks[
+        :, intervals_relative_sensitivities > threshold
+    ]
     beams_relative_sensitivities = intervals_relative_sensitivities[
         intervals_relative_sensitivities > threshold
     ]
@@ -585,7 +659,9 @@ def beams_properties_2d(
     beams_sensitivities = beams_relative_sensitivities * ppdf_2d.max()
 
     # Calculate the beam regions radian edges
-    beam_rads_edges = rad_interval_edges[intervals_relative_sensitivities > threshold]
+    beam_rads_edges = rad_interval_edges[
+        intervals_relative_sensitivities > threshold
+    ]
 
     # Get the beam sampling lines
     (beam_sp_ptx_batch, beam_sp_distance) = beam_sampling_line_batch(
