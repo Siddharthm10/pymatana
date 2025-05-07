@@ -9,6 +9,7 @@ from beam_properties import (
     get_beams_weighted_center,
     get_beam_width,
     get_beams_angle_radian,
+    get_beams_basic_properties,
     sample_ppdf_on_arc_2d_local,
 )
 from convex_hull_helper import convex_hull_2d, sort_points_for_hull_batch_2d
@@ -141,7 +142,7 @@ if __name__ == "__main__":
                 )
                 n_beams = beams_masks.shape[0]
 
-                beam_width = get_beam_width(
+                beams_width = get_beam_width(
                     beams_weighted_centers,
                     detector_unit_centers[detector_unit_idx],
                     beams_masks,
@@ -152,14 +153,9 @@ if __name__ == "__main__":
                     beams_weighted_centers,
                     detector_unit_centers[detector_unit_idx],
                 )
-                # print(
-                #     f"Detector unit {detector_unit_idx}:\n"
-                #     + f"Beam width: {beam_width}\n"
-                #     + f"Beams angle: {beams_angle}\n"
-                #     + f"Beams boundaries: {beams_boundaries}\n"
-                #     + f"Beams masks shape: {list(beams_masks.shape)}\n"
-                #     + f"Beams weighted centers shape: {list(beams_weighted_centers.shape)}\n"
-                # )
+                beams_sizes, beams_relative_sensitivity, beams_absolute_sensitivity = (
+                    get_beams_basic_properties(beams_masks, ppdf_data_2d, fov_points_xy)
+                )
                 if n_beams < 3:
                     print(
                         f"Detector unit {detector_unit_idx}:\n"
