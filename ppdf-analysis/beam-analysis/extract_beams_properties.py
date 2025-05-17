@@ -34,9 +34,7 @@ from beam_property_io import (
 
 if __name__ == "__main__":
     scanner_layouts_dir = "../../../pymatcal/scanner_layouts"
-    scanner_layouts_filename = (
-        "scanner_layouts_77faff53af5863ca146878c7c496c75e.tensor"
-    )
+    scanner_layouts_filename = "scanner_layouts_77faff53af5863ca146878c7c496c75e.tensor"
 
     ppdfs_dataset_dir = (
         "../../../../data/scanner_layouts_77faff53af5863ca146878c7c496c75e"
@@ -55,15 +53,6 @@ if __name__ == "__main__":
     fov_points_2d = pixels_coordinates(fov_dict)
     fov_n_pixels_int = int(fov_dict["n pixels"].prod())
 
-    # Initialize the HDF5 file to store the beams properties
-    out_hdf5_filename = f"beams_properties_{layouts_unique_id}.hdf5"
-    out_dir = "output"
-    out_hdf5_file, beam_properties_dataset = (
-        initialize_beam_properties_hdf5(
-            out_hdf5_filename, out_dir
-        )
-    )
-
     # Create the progress bar
     progress = Progress(
         SpinnerColumn(),
@@ -76,19 +65,32 @@ if __name__ == "__main__":
     layout_sequence = arange(0, 24)
 
     with progress:
+        # Create the progress bar for the outer loop
         task_outer = progress.add_task(
             "Processing layouts", total=int(layout_sequence.shape[0])
+        )
+
+        # Create the progress bar for the inner loop
+        task_inner = progress.add_task(
+            f"Processing detector units for layout {int(layout_sequence[0]):02d}",
+            total=1,
         )
 
         # Loop through the scanner positions (0 to 23)
         for layout_idx in layout_sequence:
 
-        
+            # Initialize the HDF5 file to store the beams properties
+            out_hdf5_filename = (
+                f"beams_properties_{layouts_unique_id}_{layout_idx:02d}.hdf5"
+            )
+            out_dir = "output"
+            out_hdf5_file, beam_properties_dataset = initialize_beam_properties_hdf5(
+                out_hdf5_filename, out_dir
+            )
+
             # Load the scanner geometry
-            plates_vertices, detector_units_vertices = (
-                load_scanner_layout_geometries(
-                    int(layout_idx), scanner_layouts_data
-                )
+            plates_vertices, detector_units_vertices = load_scanner_layout_geometries(
+                int(layout_idx), scanner_layouts_data
             )
 
             # Set the PPDFs filename for a particular scanner position
@@ -117,24 +119,19 @@ if __name__ == "__main__":
             )
             hull_points_batch = sort_points_for_hull_batch_2d(hull_points_batch)
 
-            # Print the shapes of the loaded data
-            # print(
-            #     f"Layout {layout_idx}:\n"
-            #     + f"Metal plates shape  : {list(plates_vertices.shape)}\n"
-            #     + f"Detector units shape: {list(detector_units_vertices.shape)}\n"
-            #     + f"PPDFs data shape:     {list(ppdfs.shape)}"
-            # )
-            n_detector_units = detector_units_vertices.shape[0]
-
-            # Create the progress bar for the inner loop
-            task_inner = progress.add_task(
-                f"Processing detector units for layout {layout_idx}",
-                total=n_detector_units,
-            )
+            n_detector_units = int(detector_units_vertices.shape[0])
 
             # Create a sequence of detector unit indices
             detector_units_sequence = arange(0, n_detector_units)
-            # detector_units_sequence = arange(0, 3)
+
+            # Reset the progress bar for the inner loop
+            progress.reset(
+                task_inner,
+                total=n_detector_units,
+                description=f"Processing detector units for layout {int(layout_idx):02d}",
+                completed=0,
+                start=True,
+            )
 
             # Loop through the detector units
             for detector_unit_idx in detector_units_sequence:
@@ -196,9 +193,7 @@ if __name__ == "__main__":
                     beams_sizes,
                     beams_relative_sensitivity,
                     beams_absolute_sensitivity,
-                ) = get_beams_basic_properties(
-                    beams_masks, ppdf_data_2d, fov_points_xy
-                )
+                ) = get_beams_basic_properties(beams_masks, ppdf_data_2d, fov_points_xy)
 
                 stacked_beams_properties = stack_beams_properties(
                     int(layout_idx),
@@ -211,51 +206,25 @@ if __name__ == "__main__":
                     weighted_centers=beams_weighted_centers,
                 )
 
-
                 # Append the beams properties to the HDF5 dataset
                 append_to_hdf5_dataset(
                     beam_properties_dataset,
                     stacked_beams_properties,
                 )
-                # # Append the beam masks to the HDF5 dataset
-                # append_to_hdf5_dataset(
-                #     beam_mask_dataset,
-                #     beams_masks,
-                # )
-
-                if n_beams < 3:
-                    print(
-                        f"Detector unit {detector_unit_idx}:\n"
-                        + f"Number of beams: {n_beams}\n"
-                    )
 
                 progress.update(
                     task_inner,
                     advance=1,
                 )
 
-            # print(
-            #     f"Layout {layout_idx}:\n"
-            #     + f"Shape of beams_masks_collection:    {list(beams_masks_collection.shape)}"
-            #     + f"Shape of beams_properties_collection: {list(beams_properties_collection.shape)}"
-            # )
+            # Close the HDF5 file
+            out_hdf5_file.close()
 
-            progress.remove_task(task_inner)
+            # Print the output filename
+            print(f"Beams properties saved in:\n{out_dir}/{out_hdf5_filename}")  #
             progress.update(
                 task_outer,
                 advance=1,
             )
-        progress.remove_task(task_outer)
-
-    print(
-        "Final report:\n"
-        + f"\n  beams_properties_dataset shape: {list(beam_properties_dataset.shape)}\n"
-    )
-    # # Close the HDF5 file
-    out_hdf5_file.close()
-    # Print the final message
-    print(
-        f"Beams properties saved in:\n{out_dir}/{out_hdf5_filename}"
-    )  # 
 
     print("Processing completed.")

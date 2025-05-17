@@ -51,7 +51,7 @@ def initialize_beam_properties_hdf5(
             11,
         ),  # Maximum shape: (Unlimited, 11) - unlimited rows, 11 columns
         chunks=(
-            100,
+            200,
             11,
         ),  # Chunk shape: (100, 11) - Important for performance!
     )
@@ -105,9 +105,7 @@ def initialize_beam_masks_hdf5(
             n_pixels,
         ),  # Chunk shape: (100, n_pixels) -  Important for performance!
     )
-    beam_mask_dataset.attrs["Description"] = (
-        "Beams masks for each detector unit"
-    )
+    beam_mask_dataset.attrs["Description"] = "Beams masks for each detector unit"
     beam_mask_dataset.attrs["Data type"] = "uint16"
     return (out_hdf5_file, beam_mask_dataset)
 
@@ -191,7 +189,7 @@ def stack_beams_properties(
     beams_various_ids = cat(
         (
             beams_various_ids,
-            arange(0, n_beams).unsqueeze(1),
+            arange(1, n_beams + 1).unsqueeze(1),
         ),
         dim=1,
     )

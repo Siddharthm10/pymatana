@@ -80,7 +80,7 @@ if __name__ == "__main__":
 
             # Initialize the HDF5 file to store the beams masks
             out_hdf5_filename = (
-                f"beams_masks_{layouts_unique_id}_{layout_idx:03d}.hdf5"
+                f"beams_masks_{layouts_unique_id}_{layout_idx:02d}.hdf5"
             )
 
             out_hdf5_file, beams_masks_dataset = initialize_beam_masks_hdf5(
