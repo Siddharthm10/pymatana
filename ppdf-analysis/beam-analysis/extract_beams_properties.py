@@ -3,9 +3,6 @@ from torch import (
     cat,
     tensor,
     arange,
-    empty,
-    bool as bool_tensor,
-    float as float_tensor,
 )
 
 from beam_property_extract import (
@@ -25,7 +22,6 @@ from geometry_2d_utils import (
     pixels_to_detector_unit_rads,
 )
 from ppdf_io import load_ppdfs_data_from_hdf5
-import h5py
 from beam_property_io import (
     initialize_beam_properties_hdf5,
     append_to_hdf5_dataset,
@@ -78,7 +74,6 @@ if __name__ == "__main__":
 
         # Loop through the scanner positions (0 to 23)
         for layout_idx in layout_sequence:
-
             # Initialize the HDF5 file to store the beams properties
             out_hdf5_filename = (
                 f"beams_properties_{layouts_unique_id}_{layout_idx:02d}.hdf5"
