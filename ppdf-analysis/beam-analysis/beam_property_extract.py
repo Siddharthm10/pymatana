@@ -362,7 +362,7 @@ def beams_boundaries_radians(
     arc_rads_step = arc_rads[1] - arc_rads[0]
     n_samples = arc_rads.shape[0]
 
-    appened_rads = cat(
+    appended_rads = cat(
         (
             arc_rads,
             arc_rads[-1:] + arc_rads_step,
@@ -370,7 +370,6 @@ def beams_boundaries_radians(
         dim=0,
     )
     relative_sampled_ppdf = arc_sampled_ppdf / arc_sampled_ppdf.max()
-    threshold = 0.01
     thresholded_relative_sampled_ppdf = zeros_like(
         relative_sampled_ppdf
     ).masked_fill_(relative_sampled_ppdf > threshold, 1)
@@ -410,7 +409,7 @@ def beams_boundaries_radians(
     )
 
     beams_boundaries_indices = interval_boundaries[interval_means > threshold]
-    beams_boundaries_angles = appened_rads[beams_boundaries_indices]
+    beams_boundaries_angles = appended_rads[beams_boundaries_indices]
     return beams_boundaries_angles
 
 
