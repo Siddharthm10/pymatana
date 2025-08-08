@@ -1,20 +1,28 @@
 # Imaging System Response Matrix Analysis
 
-| **Review Date**| *2025-02-06*|
+| **Review Date**| *2025-08-08*|
 |----------------|:-------------|
 | **Author** | [Fang Han (fhanonline@gmail.com)](mailto:fhanonline@gmail.com)|
 | **Description**| Python-based analysis tools for imaging system response matrix analysis|
 
-## PPDF Analysis
+## :rocket: Quick Start
 
-[ppdf-analysis](ppdf-analysis) folder
+### PPDF Beam Analysis Demo/Test
 
-### Analysis of Angular Sampling Completeness Index (ASCI) Maps Analysis
+Run the `debug_beams_property` jupyter notebook at `ppdf-analysis/beam-analysis/develop/jupyter_notebooks/debug_beams_property.ipynb`
+- This version is compatible with the python scripts used to generate the result for the SNMMI 2025 presentation results
 
-[ppdf-analysis/asci-map-analysis/](ppdf-analysis/asci-map-analysis/) folder
+## :gear: Results Production
 
-The `asci-map-analysis` folder contains the code used to generate the ASCI maps in the 2025 SNMMI abstract submission: \
-_"Angular sampling completeness index and width of projection probability density function strips as spatial resolution metrics in self-collimation single photon emission tomography"_
+### Produce the Beams Properties
 
-- Follow the instructions in the [README](ppdf-analysis/asci-map-analysis/README.md) to run the scripts.
+- `ppdf-analysis/beam-analysis/develop/python_scripts/extract_beams_props_and_masks_2.py`
+- `ppdf-analysis/beam-analysis/develop/python_scripts/extract_beams_props_and_masks.py`
 
+### Generate the ASCI Histogram
+
+- `ppdf-analysis/beam-analysis/develop/python_scripts/generate_asci_map_hisotgram.py`
+
+### Produce the ASCI Map
+
+- `ppdf-analysis/beam-analysis/develop/jupyter_notebooks/asci_map_generation.ipynb`
