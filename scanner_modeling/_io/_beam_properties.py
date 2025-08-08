@@ -60,7 +60,7 @@ def initialize_beam_properties_hdf5(
     )
     beam_properties_dataset.attrs["Data type"] = "Float"
     header = [
-        "scanner position id",  # 1
+        "scanner layout id",  # 1
         "detector unit id",  # 2
         "beam id",  # 3
         "Angle (rad)",  # 4
@@ -68,7 +68,7 @@ def initialize_beam_properties_hdf5(
         "weighted center x (mm)",  # 6
         "weighted center y (mm)",  # 7
         "sensitivity",  # 8
-        "relative sensitivity",  # 9
+        "relative sensitivity",  # 8
         "number of pixels",  # 10
         "number of coexisting beams",  # 11
     ]
@@ -136,9 +136,9 @@ def stack_beams_properties(
     detector_unit_idx: int,
     angles: Tensor,
     fwhms: Tensor,
-    sizes: Tensor,
+    beam_sizes: Tensor,
+    sensitivities: Tensor,
     relative_sensitivities: Tensor,
-    absolute_sensitivities: Tensor,
     weighted_centers: Tensor,
 ) -> Tensor:
     """
@@ -148,18 +148,25 @@ def stack_beams_properties(
     ----------
     layout_idx : int
       The index of the layout.
+
     detector_unit_idx : int
       The index of the detector unit.
+
     angles : Tensor
       The angles of the beams.
+
     fwhms : Tensor
       The full width at half maximum (FWHM) of the beams.
+
     sizes : Tensor
       The sizes of the beams.
+
+    sensitivities : Tensor
+      The absolute sensitivity of the beams.
+
     relative_sensitivities : Tensor
       The relative sensitivity of the beams.
-    absolute_sensitivities : Tensor
-      The absolute sensitivity of the beams.
+
     weighted_centers : Tensor
       The weighted centers of the beams.
 
@@ -201,9 +208,9 @@ def stack_beams_properties(
             angles.unsqueeze(1),
             fwhms.unsqueeze(1),
             weighted_centers,
-            absolute_sensitivities.unsqueeze(1),
+            sensitivities.unsqueeze(1),
             relative_sensitivities.unsqueeze(1),
-            sizes.unsqueeze(1),
+            beam_sizes.unsqueeze(1),
             beams_n_coexisting,
         ),
         dim=1,

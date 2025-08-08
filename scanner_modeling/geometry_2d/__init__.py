@@ -7,6 +7,8 @@ __all__ = [
     "fov_tensor_dict",
     "points_to_refs_angle_2d_batch",
     "polygon_to_points_angular_span_2d_batch",
+    "fov_pixels_to_crystal_rads",
+    "fov_pixels_coordinates",
 ]
 
 from .._geometry_2d._polygon import (
@@ -22,4 +24,6 @@ from .._geometry_2d._utils import (
     fov_tensor_dict,
     points_to_refs_angle_2d_batch,
     polygon_to_points_angular_span_2d_batch,
+    fov_pixels_to_crystal_rads,
+    fov_pixels_coordinates
 )

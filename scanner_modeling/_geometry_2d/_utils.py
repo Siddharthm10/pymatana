@@ -74,12 +74,12 @@ def fov_pixels_coordinates(
 
 def fov_pixels_to_crystal_rads(
     pixel_coordinates: Tensor,
-    crystal_centers: Tensor,
+    detector_unit_center: Tensor,
 ) -> Tensor:
 
     pixel_rads = atan2(
-        pixel_coordinates[:, 1] - crystal_centers[1],
-        pixel_coordinates[:, 0] - crystal_centers[0],
+        pixel_coordinates[:, 1] - detector_unit_center[1],
+        pixel_coordinates[:, 0] - detector_unit_center[0],
     )
     pixel_rads = pixel_rads + 2 * pi * (pixel_rads < 0)
     if pixel_rads.max() - pixel_rads.min() > pi:

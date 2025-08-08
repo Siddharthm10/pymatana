@@ -3,6 +3,7 @@ import os
 from torch import Tensor
 from torch import empty as empty_tensor
 from torch import float32, tensor
+from typing import cast
 
 
 def load_ppdfs_data_from_hdf5(
@@ -20,10 +21,12 @@ def load_ppdfs_data_from_hdf5(
         (fov_dict["n pixels"][0], fov_dict["n pixels"][1], 2), dtype=float32
     )
     with h5py.File(os.path.join(dataset_dir, hdf5_filename), "r") as f:
-        # Print the names of all datasets in the file
-        # print("Datasets in the file:")
-        #  for name in f:
-        #      print(name)
-        ppdfs = f["ppdfs"][:]
+        # Check if 'ppdfs' dataset exists
+        if "ppdfs" not in f or not isinstance(f["ppdfs"], h5py.Dataset):
+            print(f"'ppdfs' dataset not found in {hdf5_filename}.")
+            raise KeyError(f"'ppdfs' dataset not found in {hdf5_filename}.")
+        # Explicitly get the dataset as h5py.Dataset
+        dataset = cast(h5py.Dataset, f["ppdfs"])
+        ppdfs = dataset[:]
         ppdfs = tensor(ppdfs)
     return ppdfs
